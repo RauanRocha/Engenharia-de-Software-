@@ -1,0 +1,289 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define FILENAME "usuarios.txt"
+#define MAX_USERS 100
+#define KEY "CleitimDoPneu"
+
+// Estrutura de usuario
+typedef struct {
+    char nivel_acesso[15];
+    char nome[50];
+    char senha[50];
+} Usuario;
+
+// Função de criptografia
+void criptografar(char *texto) {
+    size_t keyLength = strlen(KEY);
+    for (int i = 0; i < strlen(texto); i++) {
+        texto[i] ^= KEY[i % keyLength]; 
+        texto[i] += 3;
+    }
+}
+
+// Função de descriptografia
+void descriptografar(char *texto) {
+    size_t keyLength = strlen(KEY);
+    for (int i = 0; i < strlen(texto); i++) {
+        texto[i] -= 3;
+        texto[i] ^= KEY[i % keyLength]; 
+    }
+}
+
+// Nivel de acesso
+void obterNivelAcesso(char *nivel_acesso) {
+    while (1) {
+        printf("Nivel de Acesso (administrador/padrao): ");
+        scanf("%s", nivel_acesso);
+        
+        if (strcmp(nivel_acesso, "administrador") == 0 || strcmp(nivel_acesso, "padrao") == 0) {
+            break;
+        } else {
+            printf("Nivel de acesso invalido. Por favor, digite 'administrador' ou 'padrao'.\n");
+        }
+    }
+}
+
+// Validar Senha
+int validarSenha(char *senha) {
+    int temMaiuscula = 0;
+    int comprimento = strlen(senha);
+    
+    if (comprimento < 8) {
+        printf("A senha deve ter pelo menos 8 caracteres.\n");
+        return 0;
+    }
+    
+    for (int i = 0; i < comprimento; i++) {
+        if (isupper(senha[i])) {
+            temMaiuscula = 1;
+        }
+    }
+    
+    if (!temMaiuscula) {
+        printf("A senha deve ter pelo menos uma letra maiuscula.\n");
+        return 0;
+    }
+    
+    return 1;
+}
+
+// Usuario Existente
+int nomeUsuarioExiste(char *nome) {
+    FILE *file = fopen(FILENAME, "r");
+    Usuario usuario;
+    
+    if (file == NULL) {
+        return 0;
+    }
+    
+    while (fscanf(file, "%[^,],%[^,],%[^\n]\n", usuario.nivel_acesso, usuario.nome, usuario.senha) != EOF) {
+        if (strcmp(usuario.nome, nome) == 0) {
+            fclose(file);
+            return 1; 
+        }
+    }
+    
+    fclose(file);
+    return 0; 
+}
+
+// Salvar Usuario
+void salvarUsuario(Usuario usuario) {
+    FILE *file = fopen(FILENAME, "a");
+    if (file == NULL) {
+        perror("Erro ao abrir arquivo");
+        return;
+    }
+    
+    criptografar(usuario.senha);
+    
+    fprintf(file, "%s,%s,%s\n", usuario.nivel_acesso, usuario.nome, usuario.senha);
+    fclose(file);
+}
+
+// Funcao para listar todos os usuarios
+void listarUsuarios() {
+    FILE *file = fopen(FILENAME, "r");
+    if (file == NULL) {
+        perror("Erro ao abrir arquivo");
+        return;
+    }
+    
+    Usuario usuario;
+    while (fscanf(file, "%[^,],%[^,],%[^\n]\n", usuario.nivel_acesso, usuario.nome, usuario.senha) != EOF) {
+        descriptografar(usuario.senha); 
+        printf("Nivel de Acesso: %s, Nome: %s, Senha: %s\n", usuario.nivel_acesso, usuario.nome, usuario.senha);
+    }
+    
+    fclose(file);
+}
+
+// Funcao para adicionar um novo usuario
+void adicionarUsuario() {
+    Usuario usuario;
+    
+    obterNivelAcesso(usuario.nivel_acesso);
+    
+    do {
+        printf("Nome do usuario: ");
+        scanf("%s", usuario.nome);
+        
+        if (nomeUsuarioExiste(usuario.nome)) {
+            printf("Nome de usuario ja existe. Por favor, escolha outro nome.\n");
+        }
+    } while (nomeUsuarioExiste(usuario.nome));
+    
+    do {
+        printf("Senha do usuario: ");
+        scanf("%s", usuario.senha);
+    } while (!validarSenha(usuario.senha));
+    
+    salvarUsuario(usuario);
+    printf("Usuario adicionado com sucesso!\n");
+}
+
+// Funcao para alterar um usuario
+void alterarUsuario(char *nome) {
+    FILE *file = fopen(FILENAME, "r");
+    FILE *tempFile = fopen("temp.txt", "w");
+    Usuario usuario;
+    int encontrado = 0;
+    
+    if (file == NULL || tempFile == NULL) {
+        perror("Erro ao abrir arquivo");
+        return;
+    }
+    
+    while (fscanf(file, "%[^,],%[^,],%[^\n]\n", usuario.nivel_acesso, usuario.nome, usuario.senha) != EOF) {
+        descriptografar(usuario.senha);
+        if (strcmp(usuario.nome, nome) == 0) {
+            encontrado = 1;
+            obterNivelAcesso(usuario.nivel_acesso);
+            printf("Novo nome: ");
+            scanf("%s", usuario.nome);
+            do {
+                printf("Nova senha: ");
+                scanf("%s", usuario.senha);
+            } while (!validarSenha(usuario.senha));
+        }
+        criptografar(usuario.senha);
+        fprintf(tempFile, "%s,%s,%s\n", usuario.nivel_acesso, usuario.nome, usuario.senha);
+    }
+    
+    fclose(file);
+    fclose(tempFile);
+    
+    remove(FILENAME);
+    rename("temp.txt", FILENAME);
+    
+    if (encontrado) {
+        printf("Usuario alterado com sucesso!\n");
+    } else {
+        printf("Usuario nao encontrado.\n");
+    }
+}
+
+// Funcao para excluir um usuario
+void excluirUsuario(char *nome) {
+    FILE *file = fopen(FILENAME, "r");
+    FILE *tempFile = fopen("temp.txt", "w");
+    Usuario usuario;
+    int encontrado = 0;
+    
+    if (file == NULL || tempFile == NULL) {
+        perror("Erro ao abrir arquivo");
+        return;
+    }
+    
+    while (fscanf(file, "%[^,],%[^,],%[^\n]\n", usuario.nivel_acesso, usuario.nome, usuario.senha) != EOF) {
+        if (strcmp(usuario.nome, nome) != 0) {
+            fprintf(tempFile, "%s,%s,%s\n", usuario.nivel_acesso, usuario.nome, usuario.senha);
+        } else {
+            encontrado = 1;
+        }
+    }
+    
+    fclose(file);
+    fclose(tempFile);
+    
+    remove(FILENAME);
+    rename("temp.txt", FILENAME);
+    
+    if (encontrado) {
+        printf("Usuario excluido com sucesso!\n");
+    } else {
+        printf("Usuario nao encontrado.\n");
+    }
+}
+
+// Funcao para exibir a senha descriptografada de um usuario especifico
+void mostrarSenhaUsuario(char *nome) {
+    FILE *file = fopen(FILENAME, "r");
+    Usuario usuario;
+    int encontrado = 0;
+    
+    if (file == NULL) {
+        perror("Erro ao abrir arquivo");
+        return;
+    }
+    
+    while (fscanf(file, "%[^,],%[^,],%[^\n]\n", usuario.nivel_acesso, usuario.nome, usuario.senha) != EOF) {
+        if (strcmp(usuario.nome, nome) == 0) {
+            descriptografar(usuario.senha);
+            printf("Nome: %s, Senha: %s\n", usuario.nome, usuario.senha);
+            encontrado = 1;
+            break;
+        }
+    }
+    
+    fclose(file);
+    
+    if (!encontrado) {
+        printf("Usuario nao encontrado.\n");
+    }
+}
+
+int main() {
+    int opcao;
+    char nome[50];
+    
+    do {
+        printf("\n1. Adicionar Usuario\n2. Alterar Usuario\n3. Excluir Usuario\n4. Listar Usuarios\n5. Mostrar Senha Descriptografada\n0. Sair\n");
+        printf("Escolha uma opcao: ");
+        scanf("%d", &opcao);
+        
+        switch (opcao) {
+            case 1:
+                adicionarUsuario();
+                break;
+            case 2:
+                printf("Nome do usuario para alterar: ");
+                scanf("%s", nome);
+                alterarUsuario(nome);
+                break;
+            case 3:
+                printf("Nome do usuario para excluir: ");
+                scanf("%s", nome);
+                excluirUsuario(nome);
+                break;
+            case 4:
+                listarUsuarios();
+                break;
+            case 5:
+                printf("Nome do usuario para exibir a senha: ");
+                scanf("%s", nome);
+                mostrarSenhaUsuario(nome);
+                break;
+            case 0:
+                printf("Saindo...\n");
+                break;
+            default:
+                printf("Opcao invalida!\n");
+        }
+    } while (opcao != 0);
+    
+    return 0;
+}
